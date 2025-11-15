@@ -1,0 +1,11 @@
+[package]
+name = "rustpython-wasm"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+getrandom = "0.3"
+rustpython-vm = { git = "https://github.com/moreal/RustPython", rev = "5d51df6286a4a4bb0d31fabadcd9af51a5a07be0", default-features = false, features = ["compiler"] }

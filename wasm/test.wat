@@ -1,13 +1,21 @@
 (module
   (import "env" "kv_put" (func $kv_put (param i32 i32 i32 i32) (result i32)))
   (import "env" "kv_get" (func $kv_get (param i32 i32 i32 i32) (result i32)))
+  (import "rustpython" "eval" (func $eval (param i32 i32) (result i32)))
 
   (memory (export "memory") 1)
+
+  (data (i32.const 50000) "1")
 
   (func (export "process") (result i32)
     (local $sum i32)
     (local $len i32)
     (local $i i32)
+
+    i32.const 0
+    i32.const 1
+    call $eval
+    drop
 
     (i32.store8 (i32.const 0) (i32.const 107))
     (i32.store8 (i32.const 1) (i32.const 49))
@@ -86,5 +94,12 @@
     ))
 
     (local.get $sum)
+  )
+
+  (func (export "return_eval") (result i32)
+    ;; Now it uses hardcoded function. See rustpython_wasm/src/lib.rs file.
+    i32.const 50000
+    i32.const 1
+    call $eval
   )
 )
