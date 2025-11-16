@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use wasmer::{
-    Function, FunctionEnv, FunctionEnvMut, Imports, Instance, Memory, Module, Store, Value, imports,
+    Function, FunctionEnv, FunctionEnvMut, Instance, Memory, Module, Store, Value, imports,
 };
 
 struct Ctx {
@@ -60,20 +60,6 @@ fn main() {
         &std::fs::read(&std::env::args().nth(1).unwrap()).unwrap(),
     )
     .unwrap();
-
-    let rustpython_module_path = &std::env::args().nth(2).unwrap();
-    let function_name = &std::env::args().nth(3).unwrap_or("process".to_string());
-
-    println!("Start to load RustPython module");
-    let rustpython_module = Module::from_file(&store, rustpython_module_path).unwrap();
-    println!("Loaded RustPython module");
-    let rustpython_inst = Instance::new(&mut store, &rustpython_module, &Imports::new()).unwrap();
-    println!("Loaded RustPython instance module");
-    let rustpython_eval = rustpython_inst
-        .exports
-        .get_function("eval")
-        .unwrap()
-        .clone();
     let env = FunctionEnv::new(
         &mut store,
         Ctx {
@@ -85,25 +71,16 @@ fn main() {
         "env" => {
             "kv_get" => Function::new_typed_with_env(&mut store, &env, kv_get),
             "kv_put" => Function::new_typed_with_env(&mut store, &env, kv_put),
-        },
-        "rustpython" => {
-            "eval" => rustpython_eval,
         }
     };
     let inst = Instance::new(&mut store, &module, &imports).unwrap();
     env.as_mut(&mut store).mem = inst.exports.get_memory("memory").ok().cloned();
-    let res = match inst
+    let res = inst
         .exports
-        .get_function(function_name)
+        .get_function("process")
         .unwrap()
         .call(&mut store, &[])
-    {
-        Ok(x) => x,
-        Err(e) => {
-            println!("{:?}", e);
-            return;
-        }
-    };
+        .unwrap();
     println!(
         "Result: {}",
         match res[0] {

@@ -1,13 +1,16 @@
 // From https://github.com/RustPython/RustPython/tree/main/wasm/wasm-unknown-test
-use rustpython_vm::{Interpreter, eval};
+use rustpython_vm::Interpreter;
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn eval(s: *const u8, l: usize) -> u32 {
-    let src = std::slice::from_raw_parts(s, l);
-    let src = std::str::from_utf8(src).unwrap();
+pub unsafe extern "C" fn process() -> i32 {
+    let src = "22 + 33";
     let interpreter = Interpreter::without_stdlib(Default::default());
     return interpreter.enter(|vm| {
-        let res = eval::eval(vm, "2+10000", vm.new_scope_with_builtins(), "<string>").unwrap();
+        let scope = vm.new_scope_with_builtins();
+        let res = match vm.run_block_expr(scope, src) {
+            Ok(val) => val,
+            Err(_) => return -1,
+        };
         res.try_into_value(vm).unwrap_or(3000) // 3000 means just error code for testing.
     });
 }
