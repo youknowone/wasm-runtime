@@ -60,10 +60,18 @@ fn main() {
         &std::fs::read(&std::env::args().nth(1).unwrap()).unwrap(),
     )
     .unwrap();
+
+    // Prepare initial KV store with Python code
+    let mut initial_kv = HashMap::new();
+    initial_kv.insert(
+        b"code".to_vec(),
+        b"a=10;b='str';f'{a}{b}'".to_vec(), // Python code to execute
+    );
+
     let env = FunctionEnv::new(
         &mut store,
         Ctx {
-            kv: HashMap::new(),
+            kv: initial_kv,
             mem: None,
         },
     );
@@ -89,4 +97,13 @@ fn main() {
         }
     );
     println!("HashMap: {:?}", env.as_ref(&store).kv);
+    let result = env
+        .as_ref(&store)
+        .kv
+        .get(&b"result".to_vec())
+        .expect("No result found");
+    println!(
+        "RustPython result: {:?}",
+        std::str::from_utf8(result).unwrap()
+    );
 }
