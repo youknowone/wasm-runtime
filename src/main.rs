@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 use wasmer::{
     Function, FunctionEnv, FunctionEnvMut, Instance, Memory, Module, Store, Value, imports,
 };
@@ -53,6 +54,17 @@ fn kv_put(mut ctx: FunctionEnvMut<Ctx>, kp: i32, kl: i32, vp: i32, vl: i32) -> i
     0
 }
 
+fn rust_benchmark(iterations: usize, data: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for _ in 0..iterations {
+        for &byte in data {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    hash
+}
+
 fn main() {
     let mut store = Store::default();
     let module = Module::new(
@@ -61,12 +73,23 @@ fn main() {
     )
     .unwrap();
 
-    // Prepare initial KV store with Python code
+    // Prepare initial KV store with Python benchmark code
     let mut initial_kv = HashMap::new();
-    initial_kv.insert(
-        b"code".to_vec(),
-        b"a=10;b='str';f'{a}{b}'".to_vec(), // Python code to execute
-    );
+    let python_code = r#"
+def py_hash(data, iterations):
+    h = 0xcbf29ce484222325
+    for _ in range(iterations):
+        for byte in data:
+            h ^= byte
+            h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+# run 10 000 iterations
+data = bytes(range(256))
+result = py_hash(data, 10000)
+str(result)
+"#;
+    initial_kv.insert(b"code".to_vec(), python_code.as_bytes().to_vec());
 
     let env = FunctionEnv::new(
         &mut store,
@@ -83,27 +106,34 @@ fn main() {
     };
     let inst = Instance::new(&mut store, &module, &imports).unwrap();
     env.as_mut(&mut store).mem = inst.exports.get_memory("memory").ok().cloned();
+
+    let start_python = Instant::now();
     let res = inst
         .exports
         .get_function("process")
         .unwrap()
         .call(&mut store, &[])
         .unwrap();
-    println!(
-        "Result: {}",
-        match res[0] {
-            Value::I32(v) => v,
-            _ => -1,
-        }
-    );
-    println!("HashMap: {:?}", env.as_ref(&store).kv);
-    let result = env
+    let python_duration = start_python.elapsed();
+
+    let python_result = env
         .as_ref(&store)
         .kv
         .get(&b"result".to_vec())
         .expect("No result found");
-    println!(
-        "RustPython result: {:?}",
-        std::str::from_utf8(result).unwrap()
-    );
+
+    println!("result code: {}", match res[0] {
+        Value::I32(v) => v,
+        _ => -1,
+    });
+    let python_result = std::str::from_utf8(python_result).unwrap();
+    println!("Python execution time: {:?} {python_result}", python_duration);
+
+    // Run native Rust benchmark
+    let data: Vec<u8> = (0..=255).collect();
+    let start_rust = Instant::now();
+    let rust_result = rust_benchmark(10_000, &data); // 10k iterations
+    let rust_duration = start_rust.elapsed();
+
+    println!("Rust execution time: {:?} {rust_result}", rust_duration);
 }

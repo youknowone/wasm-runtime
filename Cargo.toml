@@ -1,7 +1,17 @@
+[workspace]
+exclude = ["rustpython_wasm"]
+
 [package]
 name = "wasm-runtime"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-wasmer = "6.1.0"
+wasmer = { version = "6.1.0", features = ["cranelift"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
