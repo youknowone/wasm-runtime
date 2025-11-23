@@ -76,17 +76,10 @@ fn main() {
     // Prepare initial KV store with Python benchmark code
     let mut initial_kv = HashMap::new();
     let python_code = r#"
-def py_hash(data, iterations):
-    h = 0xcbf29ce484222325
-    for _ in range(iterations):
-        for byte in data:
-            h ^= byte
-            h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
-    return h
-
 # run 10 000 iterations
+import new_module
 data = bytes(range(256))
-result = py_hash(data, 10000)
+result = new_module.py_hash(data, 10000)
 str(result)
 "#;
     initial_kv.insert(b"code".to_vec(), python_code.as_bytes().to_vec());

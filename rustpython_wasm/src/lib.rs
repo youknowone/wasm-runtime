@@ -1,5 +1,24 @@
 // From https://github.com/RustPython/RustPython/tree/main/wasm/wasm-unknown-test
-use rustpython_vm::Interpreter;
+use rustpython_vm::{Interpreter, VirtualMachine, pymodule};
+
+#[pymodule]
+mod new_module {
+    use super::*;
+    use rustpython_vm::builtins::PyBytesRef;
+
+    #[pyfunction]
+    fn py_hash(data: PyBytesRef, iterations: usize) -> u64 {
+        let data = data.as_bytes();
+        let mut hash = 0xcbf29ce484222325u64;
+        for _ in 0..iterations {
+            for &byte in data {
+                hash ^= byte as u64;
+                hash = hash.wrapping_mul(0x100000001b3);
+            }
+        }
+        hash
+    }
+}
 
 // Host functions provided by the WASM runtime (main.rs)
 unsafe extern "C" {
@@ -16,8 +35,12 @@ where
     F: FnOnce(&Interpreter) -> R,
 {
     thread_local! {
-        static INTERPRETER: Interpreter =
-            Interpreter::without_stdlib(Default::default());
+        static INTERPRETER: Interpreter = {
+            let mut interp = Interpreter::with_init(Default::default(), |vm| {
+                vm.add_native_module("new_module", Box::new(new_module::make_module));
+            });
+            interp
+        }
     }
 
     INTERPRETER.with(|interp| f(interp))
@@ -35,12 +58,14 @@ pub unsafe extern "C" fn process() -> i32 {
     let code_key = b"code";
     let mut code_buffer = vec![0u8; 4096]; // Buffer for code (max 4KB)
 
-    let code_len = kv_get(
-        code_key.as_ptr() as i32,
-        code_key.len() as i32,
-        code_buffer.as_mut_ptr() as i32,
-        code_buffer.len() as i32,
-    );
+    let code_len = unsafe {
+        kv_get(
+            code_key.as_ptr() as i32,
+            code_key.len() as i32,
+            code_buffer.as_mut_ptr() as i32,
+            code_buffer.len() as i32,
+        )
+    };
 
     if code_len <= 0 {
         return -2; // Failed to read code
@@ -76,12 +101,14 @@ pub unsafe extern "C" fn process() -> i32 {
     let result_key = b"result";
     let result_bytes = result.into_bytes();
 
-    let store_status = kv_put(
-        result_key.as_ptr() as i32,
-        result_key.len() as i32,
-        result_bytes.as_ptr() as i32,
-        result_bytes.len() as i32,
-    );
+    let store_status = unsafe {
+        kv_put(
+            result_key.as_ptr() as i32,
+            result_key.len() as i32,
+            result_bytes.as_ptr() as i32,
+            result_bytes.len() as i32,
+        )
+    };
 
     if store_status < 0 {
         return -2; // Failed to store result
