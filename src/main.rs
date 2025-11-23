@@ -107,6 +107,16 @@ str(result)
     let inst = Instance::new(&mut store, &module, &imports).unwrap();
     env.as_mut(&mut store).mem = inst.exports.get_memory("memory").ok().cloned();
 
+    let prepare_python = Instant::now();
+    let _ = inst
+        .exports
+        .get_function("prepare")
+        .unwrap()
+        .call(&mut store, &[])
+        .unwrap();
+    let prepare_duration = prepare_python.elapsed();
+    println!("Python preparation time: {:?}", prepare_duration);
+
     let start_python = Instant::now();
     let res = inst
         .exports

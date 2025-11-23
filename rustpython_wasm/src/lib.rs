@@ -11,6 +11,24 @@ unsafe extern "C" {
     fn kv_put(kp: i32, kl: i32, vp: i32, vl: i32) -> i32;
 }
 
+fn with_interpreter<F, R>(f: F) -> R
+where
+    F: FnOnce(&Interpreter) -> R,
+{
+    thread_local! {
+        static INTERPRETER: Interpreter =
+            Interpreter::without_stdlib(Default::default());
+    }
+
+    INTERPRETER.with(|interp| f(interp))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn prepare() -> i32 {
+    with_interpreter(|_| {});
+    0
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn process() -> i32 {
     // 1. Read Python code from kv store
@@ -35,18 +53,19 @@ pub unsafe extern "C" fn process() -> i32 {
     };
 
     // 2. Execute Python code
-    let interpreter = Interpreter::without_stdlib(Default::default());
-    let result = interpreter.enter(|vm| {
-        let scope = vm.new_scope_with_builtins();
-        let res = match vm.run_block_expr(scope, src) {
-            Ok(val) => val,
-            Err(_) => return Err(-1), // Python execution error
-        };
-        let repr_str = match res.repr(vm) {
-            Ok(repr) => repr.as_str().to_string(),
-            Err(_) => return Err(-1), // Failed to get string representation
-        };
-        Ok(repr_str)
+    let result = with_interpreter(|interpreter| {
+        interpreter.enter(|vm| {
+            let scope = vm.new_scope_with_builtins();
+            let res = match vm.run_block_expr(scope, src) {
+                Ok(val) => val,
+                Err(_) => return Err(-1), // Python execution error
+            };
+            let repr_str = match res.repr(vm) {
+                Ok(repr) => repr.as_str().to_string(),
+                Err(_) => return Err(-1), // Failed to get string representation
+            };
+            Ok(repr_str)
+        })
     });
     let result = match result {
         Ok(r) => r,
